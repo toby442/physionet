@@ -4,7 +4,7 @@ from scipy import sparse
 from sklearn.svm import SVC
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import StratifiedKFold, cross_val_predict
-from sklearn.metrics import recall_score, f1_score, roc_auc_score, precision_score
+from sklearn.metrics import recall_score, f1_score, roc_auc_score, precision_score, accuracy_score
 from imblearn.under_sampling import TomekLinks
 from imblearn.ensemble import BalancedBaggingClassifier
 from sklearn.tree import DecisionTreeClassifier
@@ -18,13 +18,15 @@ print(f"标签分布: {y_full.value_counts().to_dict()}")
 
 skf = StratifiedKFold(n_splits=10, shuffle=True, random_state=42)
 
-def summarize(name, recalls, precisions, f1s, aucs):
+def summarize(name, accuracies, recalls, precisions, f1s, aucs):
     print(f"\n===== {name} — 10折平均结果 =====")
+    print(f"Accuracy:  {np.mean(accuracies):.3f} (std={np.std(accuracies):.3f})")
     print(f"Recall:    {np.mean(recalls):.3f} (std={np.std(recalls):.3f})")
     print(f"Precision: {np.mean(precisions):.3f} (std={np.std(precisions):.3f})")
     print(f"F1:        {np.mean(f1s):.3f} (std={np.std(f1s):.3f})")
     print(f"ROC-AUC:   {np.mean(aucs):.3f} (std={np.std(aucs):.3f})")
     return {
+        "Accuracy_mean": np.mean(accuracies), "Accuracy_std": np.std(accuracies),
         "Recall_mean": np.mean(recalls), "Recall_std": np.std(recalls),
         "Precision_mean": np.mean(precisions), "Precision_std": np.std(precisions),
         "F1_mean": np.mean(f1s), "F1_std": np.std(f1s),
@@ -32,7 +34,7 @@ def summarize(name, recalls, precisions, f1s, aucs):
     }
 
 def run_cv(name, resample_func=None, use_class_weight=False):
-    recalls, precisions, f1s, aucs = [], [], [], []
+    accuracies, recalls, precisions, f1s, aucs = [], [], [], [], []
 
     for fold_idx, (train_idx, val_idx) in enumerate(skf.split(X_full, y_full), 1):
         X_tr, X_val = X_full[train_idx], X_full[val_idx]
@@ -60,12 +62,14 @@ def run_cv(name, resample_func=None, use_class_weight=False):
         f1 = f1_score(y_val, y_pred, pos_label="Y", zero_division=0)
         precision = precision_score(y_val, y_pred, pos_label="Y", zero_division=0)
         auc = roc_auc_score(y_val_binary, y_score)
+        accuracy = accuracy_score(y_val, y_pred)
 
+        accuracies.append(accuracy)
         recalls.append(recall); precisions.append(precision)
         f1s.append(f1); aucs.append(auc)
-        print(f"  Fold {fold_idx}: Recall={recall:.3f}, Precision={precision:.3f}, F1={f1:.3f}, AUC={auc:.3f}")
+        print(f"  Fold {fold_idx}: Accuracy={accuracy:.3f}, Recall={recall:.3f}, Precision={precision:.3f}, F1={f1:.3f}, AUC={auc:.3f}")
 
-    return summarize(name, recalls, precisions, f1s, aucs)
+    return summarize(name, accuracies, recalls, precisions, f1s, aucs)
 
 # ===== 方法1: Class Weight Adjustment =====
 print("\n开始跑 String Kernel + Class Weight Adjustment...")

@@ -3,7 +3,7 @@ import pandas as pd
 from sklearn.svm import SVC
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import StratifiedKFold, cross_val_predict
-from sklearn.metrics import recall_score, f1_score, roc_auc_score, precision_score
+from sklearn.metrics import recall_score, f1_score, roc_auc_score, precision_score, accuracy_score
 from imblearn.ensemble import BalancedBaggingClassifier
 from sklearn.tree import DecisionTreeClassifier
 
@@ -18,13 +18,15 @@ y_full = pd.concat([y_train, y_test], ignore_index=True)
 
 skf = StratifiedKFold(n_splits=10, shuffle=True, random_state=42)
 
-def summarize(name, recalls, precisions, f1s, aucs):
+def summarize(name, accuracies, recalls, precisions, f1s, aucs):
     print(f"\n===== {name} — 10折平均结果 =====")
+    print(f"Accuracy:  {np.mean(accuracies):.3f} (std={np.std(accuracies):.3f})")
     print(f"Recall:    {np.mean(recalls):.3f} (std={np.std(recalls):.3f})")
     print(f"Precision: {np.mean(precisions):.3f} (std={np.std(precisions):.3f})")
     print(f"F1:        {np.mean(f1s):.3f} (std={np.std(f1s):.3f})")
     print(f"ROC-AUC:   {np.mean(aucs):.3f} (std={np.std(aucs):.3f})")
     return {
+        "Accuracy_mean": np.mean(accuracies), "Accuracy_std": np.std(accuracies),
         "Recall_mean": np.mean(recalls), "Recall_std": np.std(recalls),
         "Precision_mean": np.mean(precisions), "Precision_std": np.std(precisions),
         "F1_mean": np.mean(f1s), "F1_std": np.std(f1s),
@@ -33,7 +35,7 @@ def summarize(name, recalls, precisions, f1s, aucs):
 
 # ===== 方法3: Ensemble (BalancedBagging) — 10折交叉验证 =====
 print("开始跑 BalancedBagging 的10折交叉验证...")
-bb_recalls, bb_precisions, bb_f1s, bb_aucs = [], [], [], []
+bb_accuracies, bb_recalls, bb_precisions, bb_f1s, bb_aucs = [], [], [], [], []
 
 for fold_idx, (train_idx, val_idx) in enumerate(skf.split(X_full, y_full), 1):
     X_tr, X_val = X_full[train_idx], X_full[val_idx]
@@ -58,16 +60,18 @@ for fold_idx, (train_idx, val_idx) in enumerate(skf.split(X_full, y_full), 1):
     f1 = f1_score(y_val, y_pred, pos_label="Y", zero_division=0)
     precision = precision_score(y_val, y_pred, pos_label="Y", zero_division=0)
     auc = roc_auc_score(y_val_binary, y_score)
+    accuracy = accuracy_score(y_val, y_pred)
 
+    bb_accuracies.append(accuracy)
     bb_recalls.append(recall); bb_precisions.append(precision)
     bb_f1s.append(f1); bb_aucs.append(auc)
-    print(f"  Fold {fold_idx}: Recall={recall:.3f}, Precision={precision:.3f}, F1={f1:.3f}, AUC={auc:.3f}")
+    print(f"  Fold {fold_idx}: Accuracy={accuracy:.3f}, Recall={recall:.3f}, Precision={precision:.3f}, F1={f1:.3f}, AUC={auc:.3f}")
 
-result_bb = summarize("Ensemble (BalancedBagging)", bb_recalls, bb_precisions, bb_f1s, bb_aucs)
+result_bb = summarize("Ensemble (BalancedBagging)", bb_accuracies, bb_recalls, bb_precisions, bb_f1s, bb_aucs)
 
 # ===== 方法4: Threshold Moving — 10折交叉验证（阈值在训练折内部调优，避免泄漏）=====
 print("\n开始跑 Threshold Moving 的10折交叉验证...")
-tm_recalls, tm_precisions, tm_f1s, tm_aucs = [], [], [], []
+tm_accuracies, tm_recalls, tm_precisions, tm_f1s, tm_aucs = [], [], [], [], []
 
 for fold_idx, (train_idx, val_idx) in enumerate(skf.split(X_full, y_full), 1):
     X_tr, X_val = X_full[train_idx], X_full[val_idx]
@@ -103,12 +107,14 @@ for fold_idx, (train_idx, val_idx) in enumerate(skf.split(X_full, y_full), 1):
     f1 = f1_score(y_val, y_pred, pos_label="Y", zero_division=0)
     precision = precision_score(y_val, y_pred, pos_label="Y", zero_division=0)
     auc = roc_auc_score(y_val_binary, y_score)
+    accuracy = accuracy_score(y_val, y_pred)
 
+    tm_accuracies.append(accuracy)
     tm_recalls.append(recall); tm_precisions.append(precision)
     tm_f1s.append(f1); tm_aucs.append(auc)
-    print(f"  Fold {fold_idx}: best_threshold={best_threshold:.2f}, Recall={recall:.3f}, Precision={precision:.3f}, F1={f1:.3f}, AUC={auc:.3f}")
+    print(f"  Fold {fold_idx}: best_threshold={best_threshold:.2f}, Accuracy={accuracy:.3f}, Recall={recall:.3f}, Precision={precision:.3f}, F1={f1:.3f}, AUC={auc:.3f}")
 
-result_tm = summarize("Threshold Moving (auto-tuned)", tm_recalls, tm_precisions, tm_f1s, tm_aucs)
+result_tm = summarize("Threshold Moving (auto-tuned)", tm_accuracies, tm_recalls, tm_precisions, tm_f1s, tm_aucs)
 
 # ===== 合并之前已经跑过的Class Weight和Tomek Links结果，一起汇总 =====
 try:
